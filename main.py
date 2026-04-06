@@ -207,6 +207,10 @@ async def handle_query(req: QueryRequest):
     })
 
     # ✅ Check API keys and initialize Groq client
+    print(f"DEBUG: GROQ_API_KEY present: {bool(GROQ_API_KEY)}")
+    print(f"DEBUG: GROQ_API_KEY length: {len(GROQ_API_KEY) if GROQ_API_KEY else 0}")
+    print(f"DEBUG: MONDAY_API_KEY present: {bool(MONDAY_API_KEY)}")
+
     if not GROQ_API_KEY:
         return JSONResponse({
             "answer": "⚠️ GROQ_API_KEY not set in environment variables",
@@ -218,9 +222,12 @@ async def handle_query(req: QueryRequest):
     global groq_client
     if groq_client is None:
         try:
+            print(f"DEBUG: Initializing Groq client with key starting with: {GROQ_API_KEY[:10]}...")
             groq_client = Groq(api_key=GROQ_API_KEY)
             trace.append({"step": "groq_init", "status": "success"})
+            print("DEBUG: Groq client initialized successfully")
         except Exception as e:
+            print(f"DEBUG: Groq client initialization failed: {e}")
             trace.append({"step": "groq_init", "status": "failed", "error": str(e)})
             return JSONResponse({
                 "answer": f"⚠️ Failed to initialize Groq client: {e}",
@@ -296,8 +303,13 @@ async def handle_query(req: QueryRequest):
 async def health():
     return {
         "status": "ok",
+        "groq_api_key_present": bool(GROQ_API_KEY),
+        "groq_api_key_length": len(GROQ_API_KEY) if GROQ_API_KEY else 0,
+        "groq_client_initialized": groq_client is not None,
         "monday_configured": bool(MONDAY_API_KEY and MONDAY_BOARD_WO and MONDAY_BOARD_DEALS),
-        "anthropic_configured": bool(ANTHROPIC_API_KEY),
+        "monday_api_key_present": bool(MONDAY_API_KEY),
+        "monday_board_wo_present": bool(MONDAY_BOARD_WO),
+        "monday_board_deals_present": bool(MONDAY_BOARD_DEALS),
         "memory_sessions": len(conversation_memory)
     }
 
