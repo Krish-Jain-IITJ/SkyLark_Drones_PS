@@ -11,34 +11,23 @@ from datetime import datetime
 from pathlib import Path
 from data_cleaner import clean_work_order, clean_deal, clean_and_enrich
 from fastapi.staticfiles import StaticFiles
-try:
-    from groq import Groq
-except ImportError:
-    Groq = None
-
-try:
-    from groq import Groq
-except ImportError:
-    Groq = None
-
+from groq import Groq
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-# print("API KEY:", GEMINI_API_KEY)
 
 app = FastAPI(title="Monday.com BI Agent")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Load environment variables
+GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
 MONDAY_API_KEY    = os.getenv("MONDAY_API_KEY", "")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MONDAY_BOARD_WO   = os.getenv("MONDAY_BOARD_WO", "")
 MONDAY_BOARD_DEALS = os.getenv("MONDAY_BOARD_DEALS", "")
 MONDAY_API_URL    = "https://api.monday.com/v2"
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-groq_client = Groq(api_key=GROQ_API_KEY) if Groq and GROQ_API_KEY else None
+# Remove module-level client initialization - will initialize in handler
+groq_client = None
 
 conversation_memory = []
 _BASE = Path(__file__).parent
@@ -186,9 +175,6 @@ DEALS SAMPLE (first 20 rows):
 {json.dumps(deals[:5], default=str)}
 """
 
-    if not groq_client:
-        raise Exception("GROQ_API_KEY not configured. Cannot perform query.")
-
     trace.append({"step": "call_groq_api", "action": "Using Groq API",
                    "model": "llama-3.3-70b-versatile", "wo_records": len(wo), "deals_records": len(deals),
                   "query": query[:120], "timestamp": datetime.now().isoformat()})
@@ -220,20 +206,27 @@ async def handle_query(req: QueryRequest):
         "timestamp": t0.isoformat()
     })
 
-    # ✅ Check API keys
+    # ✅ Check API keys and initialize Groq client
     if not GROQ_API_KEY:
         return JSONResponse({
-            "answer": "⚠️ GROQ_API_KEY not set in .env",
+            "answer": "⚠️ GROQ_API_KEY not set in environment variables",
             "trace": trace,
             "error": True
         })
 
+    # Initialize Groq client if not already done
+    global groq_client
     if groq_client is None:
-        return JSONResponse({
-            "answer": "⚠️ Groq client not initialized",
-            "trace": trace,
-            "error": True
-        })
+        try:
+            groq_client = Groq(api_key=GROQ_API_KEY)
+            trace.append({"step": "groq_init", "status": "success"})
+        except Exception as e:
+            trace.append({"step": "groq_init", "status": "failed", "error": str(e)})
+            return JSONResponse({
+                "answer": f"⚠️ Failed to initialize Groq client: {e}",
+                "trace": trace,
+                "error": True
+            })
 
     if not (MONDAY_API_KEY and MONDAY_BOARD_WO and MONDAY_BOARD_DEALS):
         return JSONResponse({
