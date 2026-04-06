@@ -297,7 +297,7 @@ async def health():
     return {
         "status": "ok",
         "monday_configured": bool(MONDAY_API_KEY and MONDAY_BOARD_WO and MONDAY_BOARD_DEALS),
-        "anthropic_configured": bool(ANTHROPIC_API_KEY),
+        "groq_configured": bool(GROQ_API_KEY),
         "memory_sessions": len(conversation_memory)
     }
 
